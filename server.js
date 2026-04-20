@@ -80,10 +80,12 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 });
 
 const publicDir = path.join(__dirname, 'public');
+const assetDirPrimary = path.join(__dirname, 'app-script');
+const assetDirFallback = path.join(__dirname, '..', 'apps-script');
 app.use(express.static(publicDir, { extensions: ['html'] }));
-app.use('/assets', express.static(path.join(__dirname, '..', 'apps-script')));
+app.use('/assets', express.static(assetDirPrimary));
+app.use('/assets', express.static(assetDirFallback));
 
 app.listen(PORT, () => {
   process.stdout.write(`Server running on http://localhost:${PORT}\n`);
 });
-
