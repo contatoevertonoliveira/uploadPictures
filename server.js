@@ -349,9 +349,23 @@ app.get('/admin', requireAdminAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
+app.get('/galeria', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'gallery.html'));
+});
+
 app.get('/api/admin/list', requireAdminAuth, (req, res) => {
   const all = listAllPhotos().map((x) => ({
     relPath: x.relPath,
+    url: `/files/${encodeURI(x.relPath)}`,
+    name: x.fileName,
+    bucket: x.bucket,
+    mtime: x.mtime,
+  }));
+  res.json({ items: all });
+});
+
+app.get('/api/gallery/list', (req, res) => {
+  const all = listAllPhotos().map((x) => ({
     url: `/files/${encodeURI(x.relPath)}`,
     name: x.fileName,
     bucket: x.bucket,

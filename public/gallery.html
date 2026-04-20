@@ -1,0 +1,305 @@
+<!doctype html>
+<html class="light" lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Galeria - Nossas Memórias</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,700;1,400&family=Manrope:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              background: '#fff9ed',
+              primary: '#735a31',
+              'primary-container': '#d4b483',
+              'on-surface': '#1e1c13',
+              'on-surface-variant': '#4d463b',
+              'surface-container-lowest': '#ffffff',
+              'surface-container-low': '#faf3e5',
+              'outline-variant': '#d1c5b7',
+            },
+            borderRadius: {
+              xl: '1.5rem',
+              full: '9999px',
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      body {
+        font-family: 'Manrope', sans-serif;
+        background-color: #fff9ed;
+        -webkit-text-size-adjust: 100%;
+      }
+      h1,
+      h2,
+      h3 {
+        font-family: 'Noto Serif', serif;
+      }
+      .btn-shadow {
+        box-shadow: 0 12px 40px rgba(115, 90, 49, 0.08);
+      }
+      .masonry {
+        column-gap: 12px;
+      }
+      .masonry > * {
+        break-inside: avoid;
+        margin-bottom: 12px;
+      }
+    </style>
+  </head>
+  <body class="bg-background text-on-surface min-h-screen">
+    <header class="sticky top-0 bg-stone-50/70 backdrop-blur-xl z-50 border-b border-outline-variant/40">
+      <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
+        <a
+          href="/"
+          class="h-10 w-10 rounded-full bg-surface-container-lowest border border-outline-variant/50 btn-shadow flex items-center justify-center text-primary"
+          aria-label="Voltar"
+        >
+          <span class="material-symbols-outlined">arrow_back</span>
+        </a>
+        <div class="text-center">
+          <h1 class="text-xl font-serif text-primary leading-none">Galeria</h1>
+          <div id="meta" class="mt-1 text-xs text-on-surface-variant"></div>
+        </div>
+        <button
+          id="btnReload"
+          class="h-10 w-10 rounded-full bg-surface-container-lowest border border-outline-variant/50 btn-shadow flex items-center justify-center text-primary"
+          type="button"
+          aria-label="Recarregar"
+        >
+          <span class="material-symbols-outlined">refresh</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 py-6">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <h2 class="text-base font-semibold text-primary">Álbum</h2>
+          <div id="count" class="text-sm text-on-surface-variant"></div>
+        </div>
+        <div id="status" class="text-sm text-on-surface-variant"></div>
+      </div>
+
+      <div id="grid" class="mt-4 masonry columns-2 sm:columns-3 lg:columns-4"></div>
+    </main>
+
+    <div id="modal" class="hidden fixed inset-0 z-[100]">
+      <div id="modalBackdrop" class="absolute inset-0 bg-black/70"></div>
+      <div class="relative w-full h-full flex items-center justify-center p-4">
+        <div class="relative w-full max-w-5xl">
+          <button
+            id="modalClose"
+            class="absolute -top-3 -right-3 h-10 w-10 rounded-full bg-white text-primary border border-outline-variant/60 btn-shadow flex items-center justify-center text-xl leading-none"
+            type="button"
+            aria-label="Fechar"
+          >
+            ×
+          </button>
+          <div class="rounded-xl overflow-hidden bg-white border border-outline-variant/50 btn-shadow">
+            <img id="modalImg" alt="" class="w-full max-h-[78vh] object-contain bg-black" />
+            <div class="px-4 py-3 flex items-center justify-between gap-3">
+              <div id="modalCaption" class="text-xs text-on-surface-variant truncate"></div>
+              <div class="flex items-center gap-2">
+                <a
+                  id="modalOpen"
+                  class="px-3 py-2 rounded-full bg-surface-container-lowest border border-outline-variant/50 text-primary text-xs font-semibold"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  href="#"
+                >
+                  Abrir
+                </a>
+                <button
+                  id="modalShare"
+                  class="px-3 py-2 rounded-full bg-gradient-to-br from-primary to-primary-container text-white text-xs font-semibold"
+                  type="button"
+                >
+                  Compartilhar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const ui = {
+        meta: document.getElementById('meta'),
+        btnReload: document.getElementById('btnReload'),
+        status: document.getElementById('status'),
+        count: document.getElementById('count'),
+        grid: document.getElementById('grid'),
+        modal: document.getElementById('modal'),
+        modalBackdrop: document.getElementById('modalBackdrop'),
+        modalClose: document.getElementById('modalClose'),
+        modalImg: document.getElementById('modalImg'),
+        modalCaption: document.getElementById('modalCaption'),
+        modalOpen: document.getElementById('modalOpen'),
+        modalShare: document.getElementById('modalShare'),
+      };
+
+      const state = {
+        items: [],
+        active: null,
+      };
+
+      function setStatus(text, kind) {
+        ui.status.textContent = text || '';
+        ui.status.className =
+          kind === 'err'
+            ? 'text-sm text-red-700'
+            : kind === 'ok'
+              ? 'text-sm text-green-700'
+              : 'text-sm text-on-surface-variant';
+      }
+
+      function openModal(item) {
+        state.active = item;
+        ui.modalImg.src = item.url;
+        ui.modalImg.alt = item.name || 'Foto';
+        ui.modalCaption.textContent = item.name || '';
+        ui.modalOpen.href = item.url;
+        ui.modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+      }
+
+      function closeModal() {
+        ui.modal.classList.add('hidden');
+        ui.modalImg.src = '';
+        ui.modalImg.alt = '';
+        ui.modalCaption.textContent = '';
+        ui.modalOpen.href = '#';
+        state.active = null;
+        document.body.style.overflow = '';
+      }
+
+      async function shareCurrent() {
+        const item = state.active;
+        if (!item) return;
+
+        const shareUrl = new URL(item.url, window.location.href).toString();
+        const title = item.name || 'Foto';
+
+        if (navigator.share) {
+          try {
+            await navigator.share({ title, url: shareUrl });
+            return;
+          } catch (e) {}
+        }
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(shareUrl);
+          setStatus('Link copiado.', 'ok');
+          return;
+        }
+
+        window.prompt('Copie o link:', shareUrl);
+      }
+
+      function render() {
+        ui.grid.innerHTML = '';
+        ui.count.textContent = `${state.items.length} fotos`;
+
+        state.items.forEach((item) => {
+          const card = document.createElement('div');
+          card.className =
+            'relative rounded-xl overflow-hidden border border-outline-variant/50 bg-white btn-shadow cursor-pointer select-none';
+
+          const img = document.createElement('img');
+          img.src = item.url;
+          img.alt = item.name || 'Foto';
+          img.loading = 'lazy';
+          img.className = 'w-full h-auto block';
+
+          const bar = document.createElement('div');
+          bar.className = 'absolute inset-x-0 bottom-0 px-3 py-3 bg-gradient-to-t from-black/55 to-black/0';
+
+          const name = document.createElement('div');
+          name.className = 'text-white text-[11px] truncate';
+          name.textContent = item.name || '';
+
+          const share = document.createElement('button');
+          share.type = 'button';
+          share.className =
+            'absolute top-2 right-2 h-9 w-9 rounded-full bg-white/85 border border-outline-variant/50 flex items-center justify-center text-primary btn-shadow opacity-70 hover:opacity-100 transition-opacity';
+          share.setAttribute('aria-label', 'Compartilhar');
+          share.innerHTML =
+            '<span class="material-symbols-outlined" style="font-variation-settings: \'FILL\' 0; font-size: 20px;">share</span>';
+          share.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openModal(item);
+            await shareCurrent();
+          });
+
+          card.addEventListener('click', () => openModal(item));
+
+          let lastTapAt = 0;
+          card.addEventListener(
+            'touchend',
+            (e) => {
+              const now = Date.now();
+              if (now - lastTapAt <= 320) {
+                e.preventDefault();
+                openModal(item);
+                lastTapAt = 0;
+                return;
+              }
+              lastTapAt = now;
+            },
+            { passive: false }
+          );
+
+          bar.appendChild(name);
+          card.appendChild(img);
+          card.appendChild(bar);
+          card.appendChild(share);
+          ui.grid.appendChild(card);
+        });
+      }
+
+      async function loadAll() {
+        setStatus('Carregando...', null);
+        const res = await fetch('/api/gallery/list');
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setStatus(json.error || 'Falha ao carregar.', 'err');
+          return;
+        }
+
+        state.items = Array.isArray(json.items) ? json.items : [];
+        setStatus('Pronto.', 'ok');
+        ui.meta.textContent = `Atualizado em ${new Date().toLocaleString('pt-BR')}`;
+        render();
+      }
+
+      ui.btnReload.addEventListener('click', () => loadAll());
+      ui.modalClose.addEventListener('click', () => closeModal());
+      ui.modalBackdrop.addEventListener('click', () => closeModal());
+      ui.modalShare.addEventListener('click', () => shareCurrent());
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !ui.modal.classList.contains('hidden')) closeModal();
+      });
+
+      loadAll();
+    </script>
+  </body>
+</html>
+
