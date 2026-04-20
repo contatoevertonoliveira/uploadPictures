@@ -112,6 +112,26 @@
       </section>
     </main>
 
+    <div id="modal" class="hidden fixed inset-0 z-[100]">
+      <div id="modalBackdrop" class="absolute inset-0 bg-black/70"></div>
+      <div class="relative w-full h-full flex items-center justify-center p-4">
+        <div class="relative w-full max-w-5xl">
+          <button
+            id="modalClose"
+            class="absolute -top-3 -right-3 h-10 w-10 rounded-full bg-white text-primary border border-outline-variant/60 btn-shadow flex items-center justify-center text-xl leading-none"
+            type="button"
+            aria-label="Fechar"
+          >
+            ×
+          </button>
+          <div class="rounded-xl overflow-hidden bg-white border border-outline-variant/50 btn-shadow">
+            <img id="modalImg" alt="" class="w-full max-h-[78vh] object-contain bg-black" />
+            <div id="modalCaption" class="px-4 py-3 text-xs text-on-surface-variant truncate"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script>
       const ui = {
         meta: document.getElementById('meta'),
@@ -123,12 +143,19 @@
         status: document.getElementById('status'),
         count: document.getElementById('count'),
         grid: document.getElementById('grid'),
+        modal: document.getElementById('modal'),
+        modalBackdrop: document.getElementById('modalBackdrop'),
+        modalClose: document.getElementById('modalClose'),
+        modalImg: document.getElementById('modalImg'),
+        modalCaption: document.getElementById('modalCaption'),
       };
 
       const state = {
         items: [],
         selected: new Set(),
       };
+
+      let ignoreNextToggleUntil = 0;
 
       function setStatus(text, kind) {
         ui.status.textContent = text || '';
@@ -149,12 +176,41 @@
           .replaceAll("'", '&#039;');
       }
 
+      function openModal(url, title) {
+        ui.modalImg.src = url;
+        ui.modalImg.alt = title || 'Foto';
+        ui.modalCaption.textContent = title || '';
+        ui.modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+      }
+
+      function closeModal() {
+        ui.modal.classList.add('hidden');
+        ui.modalImg.src = '';
+        ui.modalImg.alt = '';
+        ui.modalCaption.textContent = '';
+        document.body.style.overflow = '';
+      }
+
+      function markIgnoreToggle() {
+        ignoreNextToggleUntil = Date.now() + 450;
+      }
+
+      function toggleSelection(relPath, checkbox, wrapper) {
+        if (Date.now() < ignoreNextToggleUntil) return;
+        if (state.selected.has(relPath)) state.selected.delete(relPath);
+        else state.selected.add(relPath);
+        checkbox.checked = state.selected.has(relPath);
+        renderSelectionOnly(relPath, wrapper);
+        ui.count.textContent = `${state.items.length} arquivos • ${state.selected.size} selecionados`;
+      }
+
       function render() {
         ui.grid.innerHTML = '';
         ui.count.textContent = `${state.items.length} arquivos • ${state.selected.size} selecionados`;
 
         state.items.forEach((item) => {
-          const wrapper = document.createElement('label');
+          const wrapper = document.createElement('div');
           wrapper.className =
             'relative block rounded-xl overflow-hidden border border-outline-variant/50 bg-white btn-shadow cursor-pointer select-none';
 
@@ -176,17 +232,39 @@
           checkbox.type = 'checkbox';
           checkbox.className = 'absolute top-2 right-2 h-5 w-5 rounded border-outline-variant';
           checkbox.checked = state.selected.has(item.relPath);
-          checkbox.addEventListener('change', () => {
-            if (checkbox.checked) state.selected.add(item.relPath);
-            else state.selected.delete(item.relPath);
-            renderSelectionOnly(item.relPath, wrapper);
-            ui.count.textContent = `${state.items.length} arquivos • ${state.selected.size} selecionados`;
-          });
+          checkbox.addEventListener('click', (e) => e.stopPropagation());
+          checkbox.addEventListener('change', () => toggleSelection(item.relPath, checkbox, wrapper));
 
           const caption = document.createElement('div');
           caption.className = 'p-2 text-[11px] text-on-surface-variant truncate';
           caption.title = item.name;
           caption.textContent = item.name;
+
+          wrapper.addEventListener('click', () => toggleSelection(item.relPath, checkbox, wrapper));
+
+          wrapper.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            markIgnoreToggle();
+            openModal(item.url, item.name);
+          });
+
+          let lastTapAt = 0;
+          wrapper.addEventListener(
+            'touchend',
+            (e) => {
+              const now = Date.now();
+              if (now - lastTapAt <= 320) {
+                e.preventDefault();
+                markIgnoreToggle();
+                openModal(item.url, item.name);
+                lastTapAt = 0;
+                return;
+              }
+              lastTapAt = now;
+            },
+            { passive: false }
+          );
 
           wrapper.appendChild(img);
           wrapper.appendChild(overlay);
@@ -268,8 +346,15 @@
       });
       ui.btnSend.addEventListener('click', () => sendSelected());
 
+      ui.modalClose.addEventListener('click', () => closeModal());
+      ui.modalBackdrop.addEventListener('click', () => closeModal());
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !ui.modal.classList.contains('hidden')) {
+          closeModal();
+        }
+      });
+
       loadAll();
     </script>
   </body>
 </html>
-
