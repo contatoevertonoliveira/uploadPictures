@@ -132,6 +132,26 @@
       </div>
     </div>
 
+    <div id="confirmModal" class="hidden fixed inset-0 z-[110]">
+      <div id="confirmBackdrop" class="absolute inset-0 bg-black/60"></div>
+      <div class="relative w-full h-full flex items-center justify-center p-4">
+        <div class="w-full max-w-md rounded-xl overflow-hidden bg-white border border-outline-variant/50 btn-shadow">
+          <div class="px-4 py-4">
+            <div class="text-base font-semibold text-on-surface">Excluir foto?</div>
+            <div id="confirmText" class="mt-2 text-sm text-on-surface-variant break-words"></div>
+          </div>
+          <div class="px-4 py-4 flex items-center justify-end gap-2 bg-surface-container-low">
+            <button id="confirmCancel" class="px-4 py-2 rounded-full bg-white border border-outline-variant/50">
+              Cancelar
+            </button>
+            <button id="confirmDelete" class="px-4 py-2 rounded-full bg-red-600 text-white font-semibold">
+              Excluir
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script>
       const ui = {
         meta: document.getElementById('meta'),
@@ -148,6 +168,11 @@
         modalClose: document.getElementById('modalClose'),
         modalImg: document.getElementById('modalImg'),
         modalCaption: document.getElementById('modalCaption'),
+        confirmModal: document.getElementById('confirmModal'),
+        confirmBackdrop: document.getElementById('confirmBackdrop'),
+        confirmCancel: document.getElementById('confirmCancel'),
+        confirmDelete: document.getElementById('confirmDelete'),
+        confirmText: document.getElementById('confirmText'),
       };
 
       const state = {
@@ -156,6 +181,7 @@
       };
 
       let ignoreNextToggleUntil = 0;
+      let pendingDelete = null;
 
       function setStatus(text, kind) {
         ui.status.textContent = text || '';
@@ -189,6 +215,19 @@
         ui.modalImg.src = '';
         ui.modalImg.alt = '';
         ui.modalCaption.textContent = '';
+        document.body.style.overflow = '';
+      }
+
+      function openConfirmDelete(item) {
+        pendingDelete = item;
+        ui.confirmText.textContent = item && item.name ? item.name : '';
+        ui.confirmModal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+      }
+
+      function closeConfirmDelete() {
+        ui.confirmModal.classList.add('hidden');
+        pendingDelete = null;
         document.body.style.overflow = '';
       }
 
@@ -235,6 +274,20 @@
           checkbox.addEventListener('click', (e) => e.stopPropagation());
           checkbox.addEventListener('change', () => toggleSelection(item.relPath, checkbox, wrapper));
 
+          const trash = document.createElement('button');
+          trash.type = 'button';
+          trash.className =
+            'absolute bottom-2 right-2 h-9 w-9 rounded-full bg-white/85 border border-outline-variant/50 flex items-center justify-center text-primary btn-shadow opacity-60 hover:opacity-100 transition-opacity';
+          trash.setAttribute('aria-label', 'Excluir');
+          trash.innerHTML =
+            '<span class="material-symbols-outlined" style="font-variation-settings: \'FILL\' 0; font-size: 20px;">delete</span>';
+          trash.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            markIgnoreToggle();
+            openConfirmDelete(item);
+          });
+
           const caption = document.createElement('div');
           caption.className = 'p-2 text-[11px] text-on-surface-variant truncate';
           caption.title = item.name;
@@ -270,6 +323,7 @@
           wrapper.appendChild(overlay);
           wrapper.appendChild(badge);
           wrapper.appendChild(checkbox);
+          wrapper.appendChild(trash);
           wrapper.appendChild(caption);
 
           renderSelectionOnly(item.relPath, wrapper);
@@ -351,6 +405,40 @@
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && !ui.modal.classList.contains('hidden')) {
           closeModal();
+        }
+      });
+
+      ui.confirmCancel.addEventListener('click', () => closeConfirmDelete());
+      ui.confirmBackdrop.addEventListener('click', () => closeConfirmDelete());
+      ui.confirmDelete.addEventListener('click', async () => {
+        if (!pendingDelete) return;
+        const target = pendingDelete;
+        ui.confirmDelete.disabled = true;
+        ui.confirmDelete.classList.add('opacity-60');
+        setStatus('Excluindo...', null);
+
+        try {
+          const res = await fetch('/api/admin/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ file: target.relPath }),
+          });
+          const json = await res.json().catch(() => ({}));
+          if (!res.ok || !json.ok) {
+            throw new Error(json.error || 'Falha ao excluir.');
+          }
+
+          state.selected.delete(target.relPath);
+          state.items = state.items.filter((i) => i.relPath !== target.relPath);
+          setStatus('Foto excluída.', 'ok');
+          closeConfirmDelete();
+          render();
+        } catch (e) {
+          const msg = e && e.message ? e.message : String(e || 'Erro.');
+          setStatus(msg, 'err');
+        } finally {
+          ui.confirmDelete.disabled = false;
+          ui.confirmDelete.classList.remove('opacity-60');
         }
       });
 

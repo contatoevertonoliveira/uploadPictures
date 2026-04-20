@@ -221,6 +221,28 @@ function parseEmailList(value) {
     .filter(Boolean);
 }
 
+function resolveStorageFile_(relPath) {
+  const safeRel = String(relPath || '').replace(/^\/+/, '');
+  if (!safeRel) {
+    throw new Error('Caminho inválido.');
+  }
+
+  const full = path.join(STORAGE_DIR, safeRel);
+  const normalized = path.normalize(full);
+  if (!normalized.startsWith(path.normalize(STORAGE_DIR + path.sep))) {
+    throw new Error('Caminho inválido.');
+  }
+  if (!fs.existsSync(normalized)) {
+    throw new Error(`Arquivo não encontrado: ${safeRel}`);
+  }
+  const st = fs.statSync(normalized);
+  if (!st.isFile()) {
+    throw new Error(`Não é arquivo: ${safeRel}`);
+  }
+
+  return { safeRel, fullPath: normalized, stat: st };
+}
+
 async function sendManualSelection({ relPaths, overrideEmails }) {
   const config = readRecipientsConfig();
   const emails = overrideEmails && overrideEmails.length ? overrideEmails : config.emails;
@@ -239,21 +261,13 @@ async function sendManualSelection({ relPaths, overrideEmails }) {
   const files = [];
   let totalBytes = 0;
   unique.forEach((rel) => {
-    const safeRel = rel.replace(/^\/+/, '');
-    const full = path.join(STORAGE_DIR, safeRel);
-    const normalized = path.normalize(full);
-    if (!normalized.startsWith(path.normalize(STORAGE_DIR + path.sep))) {
-      throw new Error('Caminho inválido.');
-    }
-    if (!fs.existsSync(normalized)) {
-      throw new Error(`Arquivo não encontrado: ${safeRel}`);
-    }
-    const st = fs.statSync(normalized);
-    if (!st.isFile()) {
-      throw new Error(`Não é arquivo: ${safeRel}`);
-    }
-    totalBytes += st.size;
-    files.push({ relPath: safeRel, fileName: path.basename(safeRel), fullPath: normalized });
+    const resolved = resolveStorageFile_(rel);
+    totalBytes += resolved.stat.size;
+    files.push({
+      relPath: resolved.safeRel,
+      fileName: path.basename(resolved.safeRel),
+      fullPath: resolved.fullPath,
+    });
   });
 
   if (totalBytes > 220 * 1024 * 1024) {
@@ -354,6 +368,18 @@ app.post('/api/admin/send', requireAdminAuth, async (req, res) => {
       : parseEmailList(req.body?.emails);
     const result = await sendManualSelection({ relPaths: files, overrideEmails });
     res.json({ ok: true, ...result });
+  } catch (e) {
+    const msg = e && e.message ? e.message : String(e);
+    res.status(400).json({ ok: false, error: msg });
+  }
+});
+
+app.post('/api/admin/delete', requireAdminAuth, (req, res) => {
+  try {
+    const rel = String(req.body?.file || '').trim();
+    const resolved = resolveStorageFile_(rel);
+    fs.unlinkSync(resolved.fullPath);
+    res.json({ ok: true, file: resolved.safeRel });
   } catch (e) {
     const msg = e && e.message ? e.message : String(e);
     res.status(400).json({ ok: false, error: msg });
