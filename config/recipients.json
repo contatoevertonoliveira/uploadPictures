@@ -1,8 +1,6 @@
 {
   "batchSize": 10,
-  "emails": [
-    "voce@exemplo.com"
-  ],
+  "emails": [],
   "subject": "Lote de fotos - Casorio",
   "body": "Segue em anexo o lote de fotos."
 }

@@ -9,6 +9,7 @@ const multer = require('multer');
 const nodemailer = require('nodemailer');
 
 const PORT = Number(process.env.PORT || 3000);
+const AUTO_SEND_ENABLED = String(process.env.AUTO_SEND_ENABLED || 'false').toLowerCase() === 'true';
 const ROOT_DIR = __dirname;
 const STORAGE_DIR = path.join(ROOT_DIR, 'storage');
 const INBOX_DIR = path.join(STORAGE_DIR, 'pending');
@@ -110,11 +111,13 @@ function moveFileSafe(from, to) {
 }
 
 function createTransport() {
-  const host = process.env.SMTP_HOST;
+  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
-  if (!host || !user || !pass) {
-    throw new Error('SMTP não configurado. Defina SMTP_HOST, SMTP_USER e SMTP_PASS.');
+  if (!user || !pass) {
+    throw new Error(
+      'SMTP não configurado. Defina SMTP_USER e SMTP_PASS (para Gmail, use senha de app).'
+    );
   }
 
   const port = Number(process.env.SMTP_PORT || 587);
@@ -321,6 +324,7 @@ app.get('/health', (req, res) => {
   const cfg = readRecipientsConfig();
   res.json({
     ok: true,
+    autoSendEnabled: AUTO_SEND_ENABLED,
     pending: listPendingPhotos().length,
     batchSize: cfg.batchSize,
     recipients: cfg.emails.length,
@@ -374,7 +378,9 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       fs.createWriteStream(finalPath)
     );
 
-    processBatchesIfNeeded().catch(() => {});
+    if (AUTO_SEND_ENABLED) {
+      processBatchesIfNeeded().catch(() => {});
+    }
 
     res.json({
       id: finalName,
