@@ -29,6 +29,36 @@ const upload = multer({
 
 const app = express();
 let processingBatch = false;
+app.use(express.json({ limit: '1mb' }));
+
+function requireAdminAuth(req, res, next) {
+  const user = process.env.ADMIN_USER;
+  const pass = process.env.ADMIN_PASS;
+  if (!user || !pass) {
+    res.status(403).send('Admin não configurado. Defina ADMIN_USER e ADMIN_PASS.');
+    return;
+  }
+
+  const header = String(req.headers.authorization || '');
+  if (!header.startsWith('Basic ')) {
+    res.setHeader('WWW-Authenticate', 'Basic realm="Admin"');
+    res.status(401).send('Auth requerida.');
+    return;
+  }
+
+  const decoded = Buffer.from(header.slice(6), 'base64').toString('utf8');
+  const sep = decoded.indexOf(':');
+  const reqUser = sep >= 0 ? decoded.slice(0, sep) : '';
+  const reqPass = sep >= 0 ? decoded.slice(sep + 1) : '';
+
+  if (reqUser !== user || reqPass !== pass) {
+    res.setHeader('WWW-Authenticate', 'Basic realm="Admin"');
+    res.status(401).send('Credenciais inválidas.');
+    return;
+  }
+
+  next();
+}
 
 function ensureConfigFile() {
   const configDir = path.dirname(CONFIG_PATH);
@@ -36,7 +66,7 @@ function ensureConfigFile() {
 
   if (!fs.existsSync(CONFIG_PATH)) {
     const defaultConfig = {
-      batchSize: 50,
+      batchSize: 10,
       emails: ['voce@exemplo.com'],
       subject: 'Lote de fotos - Casorio',
       body: 'Segue em anexo o lote de fotos.',
@@ -146,6 +176,105 @@ function listPendingPhotos() {
     .sort((a, b) => a.mtime - b.mtime);
 }
 
+function listAllPhotos() {
+  const items = [];
+
+  const pending = listPendingPhotos().map((x) => ({
+    relPath: `pending/${x.fileName}`,
+    fileName: x.fileName,
+    fullPath: x.fullPath,
+    mtime: x.mtime,
+    bucket: 'pending',
+  }));
+  items.push(...pending);
+
+  if (fs.existsSync(SENT_DIR)) {
+    const dayDirs = fs.readdirSync(SENT_DIR, { withFileTypes: true }).filter((d) => d.isDirectory());
+    dayDirs.forEach((d) => {
+      const dirPath = path.join(SENT_DIR, d.name);
+      const files = fs.readdirSync(dirPath, { withFileTypes: true }).filter((f) => f.isFile());
+      files.forEach((f) => {
+        const full = path.join(dirPath, f.name);
+        const st = fs.statSync(full);
+        items.push({
+          relPath: `sent/${d.name}/${f.name}`,
+          fileName: f.name,
+          fullPath: full,
+          mtime: st.mtimeMs,
+          bucket: 'sent',
+        });
+      });
+    });
+  }
+
+  items.sort((a, b) => b.mtime - a.mtime);
+  return items;
+}
+
+function parseEmailList(value) {
+  return String(value || '')
+    .split(/[,\s]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+async function sendManualSelection({ relPaths, overrideEmails }) {
+  const config = readRecipientsConfig();
+  const emails = overrideEmails && overrideEmails.length ? overrideEmails : config.emails;
+  if (!emails.length) {
+    throw new Error('Nenhum e-mail configurado.');
+  }
+
+  const unique = Array.from(new Set(relPaths.map((x) => String(x || '').trim()).filter(Boolean)));
+  if (unique.length === 0) {
+    throw new Error('Nenhuma foto selecionada.');
+  }
+  if (unique.length > 200) {
+    throw new Error('Selecione no máximo 200 arquivos por envio.');
+  }
+
+  const files = [];
+  let totalBytes = 0;
+  unique.forEach((rel) => {
+    const safeRel = rel.replace(/^\/+/, '');
+    const full = path.join(STORAGE_DIR, safeRel);
+    const normalized = path.normalize(full);
+    if (!normalized.startsWith(path.normalize(STORAGE_DIR + path.sep))) {
+      throw new Error('Caminho inválido.');
+    }
+    if (!fs.existsSync(normalized)) {
+      throw new Error(`Arquivo não encontrado: ${safeRel}`);
+    }
+    const st = fs.statSync(normalized);
+    if (!st.isFile()) {
+      throw new Error(`Não é arquivo: ${safeRel}`);
+    }
+    totalBytes += st.size;
+    files.push({ relPath: safeRel, fileName: path.basename(safeRel), fullPath: normalized });
+  });
+
+  if (totalBytes > 220 * 1024 * 1024) {
+    throw new Error('Seleção muito grande para e-mail. Reduza a quantidade de arquivos.');
+  }
+
+  const zipName = `manual_${fileDateToken()}_${files.length}fotos.zip`;
+  const zipPath = path.join(ZIP_DIR, zipName);
+  await createZipFromFiles(files, zipPath);
+
+  const cfgToSend = { ...config, emails };
+  await sendBatchEmail(zipPath, cfgToSend, files.length);
+
+  const sentBucket = path.join(SENT_DIR, new Date().toISOString().slice(0, 10));
+  fs.mkdirSync(sentBucket, { recursive: true });
+  files.forEach((f) => {
+    if (f.relPath.startsWith('pending/')) {
+      moveFileSafe(f.fullPath, path.join(sentBucket, f.fileName));
+    }
+  });
+
+  return { zipName, count: files.length, emails };
+}
+
 async function processBatchesIfNeeded() {
   if (processingBatch) return;
   processingBatch = true;
@@ -196,6 +325,35 @@ app.get('/health', (req, res) => {
     batchSize: cfg.batchSize,
     recipients: cfg.emails.length,
   });
+});
+
+app.get('/admin', requireAdminAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+app.get('/api/admin/list', requireAdminAuth, (req, res) => {
+  const all = listAllPhotos().map((x) => ({
+    relPath: x.relPath,
+    url: `/files/${encodeURI(x.relPath)}`,
+    name: x.fileName,
+    bucket: x.bucket,
+    mtime: x.mtime,
+  }));
+  res.json({ items: all });
+});
+
+app.post('/api/admin/send', requireAdminAuth, async (req, res) => {
+  try {
+    const files = Array.isArray(req.body?.files) ? req.body.files : [];
+    const overrideEmails = Array.isArray(req.body?.emails)
+      ? req.body.emails
+      : parseEmailList(req.body?.emails);
+    const result = await sendManualSelection({ relPaths: files, overrideEmails });
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    const msg = e && e.message ? e.message : String(e);
+    res.status(400).json({ ok: false, error: msg });
+  }
 });
 
 app.post('/api/upload', upload.single('file'), async (req, res) => {

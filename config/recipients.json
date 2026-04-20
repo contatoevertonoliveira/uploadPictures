@@ -1,5 +1,5 @@
 {
-  "batchSize": 50,
+  "batchSize": 10,
   "emails": [
     "voce@exemplo.com"
   ],
