@@ -8,8 +8,9 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "archiver": "^7.0.1",
     "express": "^4.19.2",
-    "googleapis": "^140.0.0",
-    "multer": "^1.4.5-lts.1"
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.9.14"
   }
 }
